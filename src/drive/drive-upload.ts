@@ -33,6 +33,7 @@ function createFolderOrEmpty(drive: drive_v3.Drive, filePath: string, parent: st
   drive.files.create({
     // @ts-ignore Unknown property error
     fields: 'id',
+    supportsAllDrives: true,
     requestBody: {
       mimeType: mime,
       name: filePath.substring(filePath.lastIndexOf('/') + 1),
@@ -48,21 +49,27 @@ function createFolderOrEmpty(drive: drive_v3.Drive, filePath: string, parent: st
     });
 }
 
-export function getSharableLink(fileId: string, isFolder: boolean, callback: (err: string, url: string) => void): void {
-  driveAuth.call((err, auth) => {
-    if (err) {
-      callback(err, null);
-      return;
-    }
-    const drive = google.drive({ version: 'v3', auth });
-    createPermissions(drive, fileId)
-      .then(() => {
-        callback(null, utils.getFileLink(fileId, isFolder));
-      })
-      .catch(err => {
-        callback(err.message, null);
-      });
-  });
+export function getSharableLink(fileId: string, isFolder: boolean, 
+  callback: (err: string, url: string, isFolder: boolean) => void): void {
+
+  if (!constants.IS_TEAM_DRIVE || (constants.IS_TEAM_DRIVE && !isFolder)) {
+    driveAuth.call((err, auth) => {
+      if (err) {
+        callback(err, null, false);
+        return;
+      }
+      const drive = google.drive({ version: 'v3', auth });
+      createPermissions(drive, fileId)
+        .then(() => {
+          callback(null, utils.getFileLink(fileId, isFolder), isFolder);
+        })
+        .catch(err => {
+          callback(err.message, null, false);
+        });
+    });
+  } else {
+    callback(null, utils.getFileLink(fileId, isFolder), isFolder);
+  }
 }
 
 async function createPermissions(drive: drive_v3.Drive, fileId: string): Promise<any> {
@@ -72,6 +79,7 @@ async function createPermissions(drive: drive_v3.Drive, fileId: string): Promise
     for (var email of constants.DRIVE_FILE_PRIVATE.EMAILS) {
       var perm = await drive.permissions.create({
         fileId: fileId,
+        supportsAllDrives: true,
         requestBody: {
           role: 'reader',
           type: 'user',
@@ -84,6 +92,7 @@ async function createPermissions(drive: drive_v3.Drive, fileId: string): Promise
   } else {
     return drive.permissions.create({
       fileId: fileId,
+      supportsAllDrives: true,
       requestBody: {
         role: 'reader',
         type: 'anyone'
